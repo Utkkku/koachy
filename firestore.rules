@@ -1,0 +1,338 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // YARDIMCI FONKSİYONLAR
+    // Not: Uygulama rol dizelerini PascalCase kullanır ('Admin', 'Student', 'Coach').
+    // isAdmin hem 'admin' hem 'Admin' kabul eder (geçiş / tutarlılık).
+    // -------------------------------------------------------------------------
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function isAdmin() {
+      return isAuthenticated()
+        && exists(userPath())
+        && (
+          get(userPath()).data.role == 'admin'
+          || get(userPath()).data.role == 'Admin'
+        );
+    }
+
+    function isCoach() {
+      return isAuthenticated()
+        && exists(userPath())
+        && get(userPath()).data.role == 'Coach';
+    }
+
+    function isStudent() {
+      return isAuthenticated()
+        && exists(userPath())
+        && get(userPath()).data.role == 'Student';
+    }
+
+    /** Vitrin: onaylı koç profili — isApproved tam olarak true olmalıdır */
+    function isPublicApprovedCoachProfile() {
+      return resource.data.role == 'Coach'
+        && resource.data.isApproved == true;
+    }
+
+    function coachReadsAssignedStudent() {
+      return isCoach()
+        && resource.data.role == 'Student'
+        && resource.data.selectedCoachId == request.auth.uid;
+    }
+
+    function userPrivilegedFieldsTouched() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'role', 'hasPackage', 'isApproved', 'credits'
+      ]);
+    }
+
+    function coachSelectionKeysAffected() {
+      return 'selectedCoachId' in request.resource.data.diff(resource.data).affectedKeys()
+        || 'coachChangeUsed' in request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    /** Öğrenci introMeetingAvailable alanını yalnızca false yapabilir */
+    function studentIntroMeetingFieldOk(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role != 'Student'
+        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['introMeetingAvailable'])
+        || request.resource.data.introMeetingAvailable == false;
+    }
+
+    function hasCoachSwapLock() {
+      return resource.data.keys().hasAny(['coachChangeUsed']) && resource.data.coachChangeUsed == true;
+    }
+
+    function conversationData(convId) {
+      return get(/databases/$(database)/documents/conversations/$(convId)).data;
+    }
+
+    /** Sohbette öğrenci: paket, veya açık tanışma sohbeti; koç sonlandırdıysa yazamaz */
+    function studentMaySendConversationMessage(convId) {
+      let conv = conversationData(convId);
+      let isStudentSender = request.auth.uid == conv.studentId;
+      return !isStudentSender
+        || (
+          exists(userPath())
+          && conv.conversationStatus != 'closed_by_coach'
+          && (
+            get(userPath()).data.purchasedPackage != null
+            || conv.isIntroSession == true
+          )
+        );
+    }
+
+    function conversationLastMessageOnlyUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['lastMessage', 'lastMessageAt']);
+    }
+
+    function coachEndsConversation() {
+      return isCoach()
+        && request.auth.uid == resource.data.coachId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['conversationStatus', 'closedByCoachAt'])
+        && request.resource.data.conversationStatus == 'closed_by_coach'
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.coachId == resource.data.coachId
+        && request.resource.data.participants == resource.data.participants;
+    }
+
+    function validStudentCoachSelectionWrite() {
+      return resource.data.role == 'Student'
+        && resource.data.purchasedPackage != null
+        && (
+          (
+            (!resource.data.keys().hasAny(['selectedCoachId']) || resource.data.selectedCoachId == null)
+            && request.resource.data.keys().hasAny(['selectedCoachId'])
+            && request.resource.data.selectedCoachId is string
+            && request.resource.data.selectedCoachId.size() > 0
+            && (!request.resource.data.keys().hasAny(['coachChangeUsed']) || request.resource.data.coachChangeUsed == false)
+          )
+          ||
+          (
+            resource.data.keys().hasAny(['selectedCoachId'])
+            && resource.data.selectedCoachId != null
+            && !hasCoachSwapLock()
+            && request.resource.data.selectedCoachId is string
+            && request.resource.data.selectedCoachId != resource.data.selectedCoachId
+            && request.resource.data.coachChangeUsed == true
+          )
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // users
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isAdmin()
+        || (isAuthenticated() && isOwner(userId))
+        || isPublicApprovedCoachProfile()
+        || coachReadsAssignedStudent();
+
+      allow create: if isAdmin()
+        || (
+          isAuthenticated()
+          && isOwner(userId)
+          && request.resource.data.role != 'admin'
+          && request.resource.data.role != 'Admin'
+          && (request.resource.data.role == 'Student' || request.resource.data.role == 'Coach')
+          && !request.resource.data.keys().hasAny(['hasPackage', 'credits', 'isApproved'])
+          && request.resource.data.keys().hasAll(['email', 'role', 'name', 'createdAt'])
+        );
+
+      allow update: if isAdmin()
+        || (
+          isAuthenticated()
+          && isOwner(userId)
+          && !userPrivilegedFieldsTouched()
+          && studentIntroMeetingFieldOk(userId)
+          && (
+            !coachSelectionKeysAffected()
+            || validStudentCoachSelectionWrite()
+          )
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // coaches (ayrı public koleksiyon)
+    // -------------------------------------------------------------------------
+    match /coaches/{coachId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && (request.auth.uid == coachId || isAdmin());
+      allow update: if isAuthenticated() && (request.auth.uid == coachId || isAdmin());
+      allow delete: if isAuthenticated() && (request.auth.uid == coachId || isAdmin());
+    }
+
+    // -------------------------------------------------------------------------
+    // appointments
+    // -------------------------------------------------------------------------
+    match /appointments/{appointmentId} {
+      allow read: if isAuthenticated()
+        && (
+          resource.data.coachId == request.auth.uid
+          || resource.data.studentId == request.auth.uid
+          || isAdmin()
+        );
+
+      allow create: if isAuthenticated()
+        && isStudent()
+        && request.resource.data.studentId == request.auth.uid;
+
+      allow update: if isAuthenticated()
+        && (
+          resource.data.coachId == request.auth.uid
+          || resource.data.studentId == request.auth.uid
+          || isAdmin()
+        );
+
+      allow delete: if isAuthenticated()
+        && (
+          resource.data.coachId == request.auth.uid
+          || resource.data.studentId == request.auth.uid
+          || isAdmin()
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // purchaseRequests (uygulama: link ile ödeme talepleri)
+    // -------------------------------------------------------------------------
+    match /purchaseRequests/{requestId} {
+      allow read: if isAdmin()
+        || (isAuthenticated() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAuthenticated()
+        && isStudent()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.packageId is string
+        && request.resource.data.studentName is string;
+
+      allow update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // payments — yalnızca admin (istemci güvenilmez)
+    // -------------------------------------------------------------------------
+    match /payments/{paymentId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // system_logs — yalnızca admin
+    // -------------------------------------------------------------------------
+    match /system_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // messages (üst seviye — senderId / receiverId modeli)
+    // Admin: okuma serbest, yazma yok.
+    // -------------------------------------------------------------------------
+    match /messages/{messageId} {
+      allow read: if isAuthenticated()
+        && (
+          isAdmin()
+          || resource.data.senderId == request.auth.uid
+          || resource.data.receiverId == request.auth.uid
+        );
+
+      allow create: if isAuthenticated()
+        && !isAdmin()
+        && request.resource.data.senderId == request.auth.uid;
+
+      allow update, delete: if isAuthenticated()
+        && !isAdmin()
+        && (
+          resource.data.senderId == request.auth.uid
+          || resource.data.receiverId == request.auth.uid
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // conversations + alt mesajlar (uygulama: katılımcılar + admin okuma)
+    // -------------------------------------------------------------------------
+    match /conversations/{convId} {
+      allow read: if isAuthenticated()
+        && (
+          request.auth.uid in resource.data.participants
+          || isAdmin()
+        );
+
+      allow create: if isAuthenticated()
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.studentId is string
+        && request.resource.data.coachId is string
+        && (
+          (
+            isCoach()
+            && request.auth.uid == request.resource.data.coachId
+          )
+          || (
+            isStudent()
+            && request.auth.uid == request.resource.data.studentId
+            && (
+              get(userPath()).data.purchasedPackage != null
+              || (
+                request.resource.data.isIntroSession == true
+                && (!request.resource.data.keys().hasAny(['conversationStatus'])
+                  || request.resource.data.conversationStatus == 'open')
+                && get(userPath()).data.introMeetingAvailable == true
+              )
+            )
+          )
+        );
+
+      allow update: if isAuthenticated()
+        && request.auth.uid in resource.data.participants
+        && (
+          isAdmin()
+          || (
+            conversationLastMessageOnlyUpdate()
+            && request.resource.data.conversationStatus == resource.data.conversationStatus
+            && request.resource.data.isIntroSession == resource.data.isIntroSession
+            && request.resource.data.studentId == resource.data.studentId
+            && request.resource.data.coachId == resource.data.coachId
+          )
+          || coachEndsConversation()
+        );
+
+      match /messages/{msgId} {
+        allow read: if isAuthenticated()
+          && (
+            request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+            || isAdmin()
+          );
+
+        allow create: if isAuthenticated()
+          && !isAdmin()
+          && request.auth.uid == request.resource.data.senderId
+          && request.auth.uid
+            in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+          && studentMaySendConversationMessage(convId);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Varsayılan: red
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

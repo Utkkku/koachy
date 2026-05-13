@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// Firebase Storage — profil görselleri (öğrenci / koç)
+// - get: Bilinen URL ile indirme (vitrin, mesajlar) — kimlik şartı yok
+// - list: Kapalı (bucket içeriği taranamaz)
+// - create/update/delete: Sadece kendi UID klasörü, boyut ve MIME kısıtlı
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    match /profiles/{userId}/{fileName} {
+
+      // UID ve dosya adı path traversal / garip karakterlere karşı
+      function isSafeUserId() {
+        return userId.size() > 0 && userId.size() <= 128
+          && !userId.matches('.*[/\\\\].*');
+      }
+
+      function isSafeFileName() {
+        return fileName.size() > 0 && fileName.size() <= 200
+          && !fileName.matches('.*[/\\\\].*')
+          && !fileName.matches('^\\.+$');
+      }
+
+      function isOwner() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isAllowedImageWrite() {
+        return request.resource != null
+          && request.resource.size > 0
+          && request.resource.size <= 5 * 1024 * 1024
+          && request.resource.contentType.matches('image/(jpeg|jpg|png|gif|webp)');
+      }
+
+      // Tek dosya indirme (getDownloadURL / <img src>) — list yok
+      allow get: if isSafeUserId() && isSafeFileName();
+
+      // Klasör/dizin listeleme kapalı (enumerasyon ve bilgi sızıntısı önlemi)
+      allow list: if false;
+
+      allow create: if isOwner() && isSafeUserId() && isSafeFileName() && isAllowedImageWrite();
+
+      allow update: if isOwner() && isSafeUserId() && isSafeFileName() && isAllowedImageWrite();
+
+      allow delete: if isOwner() && isSafeUserId() && isSafeFileName();
+    }
+
+    // Bu dosyada tanımlanmayan yollar için Firebase varsayılanı: erişim yok
+  }
+}
