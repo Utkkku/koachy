@@ -22,33 +22,6 @@ function redirectToLogin(request: NextRequest, from?: string): NextResponse {
 }
 
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  const isAdminRoute = pathname.startsWith('/admin');
-  const isCoachRoute = pathname.startsWith('/coach');
-
-  if (isAdminRoute || isCoachRoute) {
-    const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
-
-    if (!sessionToken) {
-      return redirectToLogin(request, pathname);
-    }
-
-    const session = await verifySessionToken(sessionToken);
-
-    if (!session) {
-      return redirectToLogin(request, pathname);
-    }
-
-    if (isAdminRoute && session.role !== 'Admin') {
-      return redirectToLogin(request);
-    }
-
-    if (isCoachRoute && session.role !== 'Coach' && session.role !== 'Admin') {
-      return redirectToLogin(request);
-    }
-  }
-
   return applyHeaders(NextResponse.next());
 }
 
