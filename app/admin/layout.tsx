@@ -35,6 +35,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
 
+  // #region agent log
+  console.error('[DEBUG-ADMIN-RENDER] AdminLayout rendering (sync)', { loading, role: userRole?.role ?? null, hasUser: !!user });
+  // #endregion
+
   useEffect(() => {
     // #region agent log
     console.error('[DEBUG-ADMIN] layout useEffect fired', { loading, hasUser: !!user, role: userRole?.role ?? null, userEmail: user?.email ?? null });
