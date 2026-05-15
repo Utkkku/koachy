@@ -84,13 +84,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Sunucu tarafı route koruması için HttpOnly session cookie oluştur
+        // AWAITED: cookie set edilmeden setLoading(false) çalışmamalı (race condition önleme)
         try {
           const idToken = await firebaseUser.getIdToken();
-          fetch('/api/auth/session', {
+          await fetch('/api/auth/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ idToken }),
-          }).catch(() => {});
+          });
         } catch {
           // Session cookie oluşturulamazsa client-side auth devam eder
         }
