@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { Menu, X } from "lucide-react"
 import Link from "next/link"
@@ -17,6 +18,20 @@ const navLinks = [
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { user, userRole } = useAuth()
+  const router = useRouter()
+
+  const handleAdminPanelClick = () => {
+    // #region agent log
+    console.error('[DEBUG-NAV] Admin panel button clicked', {
+      uid: user?.uid ?? null,
+      email: user?.email ?? null,
+      role: userRole?.role ?? null,
+      loading: typeof window !== 'undefined' ? window.location.href : null,
+    })
+    fetch('http://127.0.0.1:7513/ingest/257dee3d-71f4-4433-9a7e-bc28311fb7ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'657fac'},body:JSON.stringify({sessionId:'657fac',location:'navbar.tsx:handleAdminPanelClick',message:'Admin panel button clicked',data:{uid:user?.uid??null,email:user?.email??null,role:userRole?.role??null,href:typeof window!=='undefined'?window.location.href:null},hypothesisId:'E',timestamp:Date.now()})}).catch(()=>{})
+    // #endregion
+    router.push('/admin/dashboard')
+  }
 
   return (
     <motion.header
@@ -59,6 +74,14 @@ export function Navbar() {
           <div className="hidden md:flex items-center gap-3">
             {user && userRole?.role ? (
               <>
+                {userRole.role === 'Admin' && (
+                  <button
+                    onClick={handleAdminPanelClick}
+                    className="px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 border-2 border-black rounded-full shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+                  >
+                    Admin Paneli
+                  </button>
+                )}
                 {userRole.role === 'Coach' && (
                   <Link
                     href="/coach/dashboard"
@@ -134,6 +157,14 @@ export function Navbar() {
               <div className="flex flex-col gap-3 pt-4 border-t-2 border-black">
                 {user && userRole?.role ? (
                   <>
+                    {userRole.role === 'Admin' && (
+                      <button
+                        onClick={() => { setMobileMenuOpen(false); handleAdminPanelClick() }}
+                        className="px-5 py-3 text-sm font-bold text-white bg-indigo-600 border-2 border-black rounded-full text-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        Admin Paneli
+                      </button>
+                    )}
                     {userRole.role === 'Coach' && (
                       <Link
                         href="/coach/dashboard"

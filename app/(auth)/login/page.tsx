@@ -38,9 +38,17 @@ function LoginPageInner() {
 
   useEffect(() => {
     // Eğer kullanıcı giriş yapmışsa, rolüne göre yönlendir
+    // #region agent log
+    console.error('[DEBUG-LOGIN] redirect useEffect fired', { authLoading, hasUser: !!user, role: userRole?.role ?? null, redirectQuery: searchParams.get('redirect') });
+    fetch('http://127.0.0.1:7513/ingest/257dee3d-71f4-4433-9a7e-bc28311fb7ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'657fac'},body:JSON.stringify({sessionId:'657fac',location:'login/page.tsx:useEffect',message:'Login redirect useEffect fired',data:{authLoading,hasUser:!!user,role:userRole?.role??null,redirectQuery:searchParams.get('redirect')},hypothesisId:'D',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!authLoading && user && userRole?.role) {
       const fromQuery = getSafeRedirectPath(searchParams.get('redirect'));
       if (fromQuery) {
+        // #region agent log
+        console.error('[DEBUG-LOGIN] redirecting via fromQuery param', { fromQuery, role: userRole.role });
+        fetch('http://127.0.0.1:7513/ingest/257dee3d-71f4-4433-9a7e-bc28311fb7ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'657fac'},body:JSON.stringify({sessionId:'657fac',location:'login/page.tsx:43',message:'Login redirecting via fromQuery param',data:{fromQuery,role:userRole.role},hypothesisId:'D',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         router.replace(fromQuery);
         return;
       }
@@ -50,6 +58,10 @@ function LoginPageInner() {
         Admin: '/admin/dashboard',
       };
       const target = redirectMap[userRole.role];
+      // #region agent log
+      console.error('[DEBUG-LOGIN] redirecting via role map', { role: userRole.role, target: target ?? null });
+      fetch('http://127.0.0.1:7513/ingest/257dee3d-71f4-4433-9a7e-bc28311fb7ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'657fac'},body:JSON.stringify({sessionId:'657fac',location:'login/page.tsx:52',message:'Login redirecting via role map',data:{role:userRole.role,target:target??null},hypothesisId:'D',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (target) {
         router.replace(target);
       }

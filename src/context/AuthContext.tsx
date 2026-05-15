@@ -54,20 +54,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
-            setUserRole(mapUserDocToAuthRole(firebaseUser, userDoc.data()));
+            const roleData = mapUserDocToAuthRole(firebaseUser, userDoc.data());
+            // #region agent log
+            console.error('[DEBUG-AUTH] Firestore doc EXISTS', { uid: firebaseUser.uid, rawRole: userDoc.data().role, mappedRole: roleData.role });
+            fetch('http://127.0.0.1:7513/ingest/257dee3d-71f4-4433-9a7e-bc28311fb7ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'657fac'},body:JSON.stringify({sessionId:'657fac',location:'AuthContext.tsx:57',message:'Firestore doc EXISTS - role fetched',data:{uid:firebaseUser.uid,rawRole:userDoc.data().role,mappedRole:roleData.role,email:firebaseUser.email},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+            setUserRole(roleData);
           } else {
             const empty: AuthUserRole = {
               role: null,
               email: firebaseUser.email,
             };
+            // #region agent log
+            console.error('[DEBUG-AUTH] Firestore doc DOES NOT EXIST - role null', { uid: firebaseUser.uid });
+            fetch('http://127.0.0.1:7513/ingest/257dee3d-71f4-4433-9a7e-bc28311fb7ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'657fac'},body:JSON.stringify({sessionId:'657fac',location:'AuthContext.tsx:63',message:'Firestore doc DOES NOT EXIST - role null',data:{uid:firebaseUser.uid,email:firebaseUser.email},hypothesisId:'B',timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             setUserRole(empty);
           }
         } catch (error) {
-          console.error('Error fetching user role:', error);
+          console.error('[DEBUG-AUTH] Firestore read ERROR - role null fallback', { uid: firebaseUser.uid, error: String(error) });
           const fallback: AuthUserRole = {
             role: null,
             email: firebaseUser.email,
           };
+          // #region agent log
+          fetch('http://127.0.0.1:7513/ingest/257dee3d-71f4-4433-9a7e-bc28311fb7ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'657fac'},body:JSON.stringify({sessionId:'657fac',location:'AuthContext.tsx:72',message:'Firestore read ERROR - role null fallback',data:{uid:firebaseUser.uid,email:firebaseUser.email,error:String(error)},hypothesisId:'C',timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           setUserRole(fallback);
         }
 

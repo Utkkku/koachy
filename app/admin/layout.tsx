@@ -36,10 +36,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   useEffect(() => {
+    // #region agent log
+    console.error('[DEBUG-ADMIN] layout useEffect fired', { loading, hasUser: !!user, role: userRole?.role ?? null, userEmail: user?.email ?? null });
+    fetch('http://127.0.0.1:7513/ingest/257dee3d-71f4-4433-9a7e-bc28311fb7ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'657fac'},body:JSON.stringify({sessionId:'657fac',location:'admin/layout.tsx:useEffect',message:'Admin layout useEffect fired',data:{loading,hasUser:!!user,role:userRole?.role??null,userEmail:user?.email??null},hypothesisId:'E',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!loading) {
       if (!user) {
         router.push('/login');
       } else if (userRole?.role !== 'Admin') {
+        // #region agent log
+        console.error('[DEBUG-ADMIN] REJECTING user - role is not Admin', { role: userRole?.role ?? null });
+        fetch('http://127.0.0.1:7513/ingest/257dee3d-71f4-4433-9a7e-bc28311fb7ad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'657fac'},body:JSON.stringify({sessionId:'657fac',location:'admin/layout.tsx:44',message:'Admin layout REJECTING user - redirecting to login',data:{role:userRole?.role??null,userEmail:user?.email??null},hypothesisId:'E',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         router.push('/login');
       }
     }
