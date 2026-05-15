@@ -14,7 +14,10 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 let app: App | null = null;
 
 function normalizePrivateKey(key: string): string {
-  return key.replace(/\\n/g, '\n');
+  return key
+    .replace(/\\n/g, '\n')  // literal \n → actual newline
+    .replace(/\r\n/g, '\n') // Windows CRLF → LF
+    .replace(/\r/g, '\n');  // lone CR → LF
 }
 
 function initFromServiceAccountEnv(): App {
