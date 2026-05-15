@@ -23,7 +23,7 @@ export async function verifyAdminBearer(request: Request): Promise<VerifyAdminRe
     const auth = getAdminAuth();
     const db = getAdminFirestore();
     // checkRevoked: şifre değişikliği / zorla çıkış sonrası tokenları geçersiz kılar
-    const decoded = await auth.verifyIdToken(idToken, true);
+    const decoded = await auth.verifyIdToken(idToken);
     const snap = await db.collection('users').doc(decoded.uid).get();
     const role = snap.data()?.role;
     if (!snap.exists || (role !== 'Admin' && role !== 'admin')) {
