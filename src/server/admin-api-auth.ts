@@ -44,6 +44,11 @@ export async function verifyAdminBearer(request: Request): Promise<VerifyAdminRe
         return { ok: false, status: 503, error: 'Hizmet hesabı JSON’u geçersiz.' };
       }
     }
-    return { ok: false, status: 401, error: 'Oturum doğrulanamadı. Sayfayı yenileyip tekrar deneyin.' };
+    // #region agent log
+    const errMsg = e instanceof Error ? e.message : String(e);
+    const errCode = (e as {code?: string})?.code ?? 'no-code';
+    console.error('[DEBUG-ADMIN-AUTH] caught:', errMsg, 'code:', errCode);
+    // #endregion
+    return { ok: false, status: 401, error: `Hata: ${e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80)}` };
   }
 }
